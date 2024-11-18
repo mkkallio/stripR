@@ -1,0 +1,28 @@
+Package: stripR
+Type: Package
+Title: An R package to support the creation of strip maps
+Version: 0.0.9999
+Author: c(person("Marko", "Kallio", email = "marko.k.kallio@aalto.fi", 
+                  role = c("aut", "cre"), 
+                  comment = c(ORCID = "0000-0002-6917-7790"))
+Maintainer: Marko Kallio <marko.k.kallio@aalto.fi>
+Description: An R package dedicated to the processing of spatial data to support
+    creation of stip maps. The package can "straigthen" arbitrary LINESTRINGs
+    and rotate, move, and blend rasters along the straightened line. Functions
+    are also provided for the rotation and moving of vectors along the line.
+Depends: 
+    R (>= 4.2.0)
+Imports:
+    sf,
+    lwgeom,
+    stars,
+    terra,
+    dplyr,
+    magick,
+    abind,
+    raster,
+    units
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
