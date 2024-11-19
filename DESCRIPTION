@@ -11,16 +11,13 @@ Description: An R package dedicated to the processing of spatial data to support
     and rotate, move, and blend rasters along the straightened line. Functions
     are also provided for the rotation and moving of vectors along the line.
 Depends: 
-    R (>= 4.2.0)
+    R (>= 4.0.0)
 Imports:
     sf,
     lwgeom,
     stars,
     terra,
     dplyr,
-    magick,
-    abind,
-    raster,
     units
 License: MIT + file LICENSE
 Encoding: UTF-8

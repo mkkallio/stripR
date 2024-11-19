@@ -1,7 +1,27 @@
+#' Create a strip map with raster data using transects. EXPERIMENTAL
+#' 
+#' The function creates a strip of the specified shape with raster data 
+#' using transects derived from the linestring. Raster data is then sampled
+#' from the raster with the linestring. The values are then translated to
+#' transects computed from the target shape, and gaps are filled with 
+#' using IDW interpolation. EXPERIMENTAL AND SUBJECT TO CHANGE!
+#' 
+#' 
+#' @param line An sf linestring
+#' @param r sf object with the vectors to be strip'd.
+#' @param shape a sf linestring object showing the target shape.
+#' @param n_transects The number of transects to create from the line
+#' @param width Width of the transect
+#' @param radius radius for inverse distance weighting-based interpolation to
+#' fill gaps between transects.
+#' @param ... Further arguments passed to terra::interpIDW()
+#' 
+#' @returns a list with two elements: the rotated linestring and vectors.
+#' 
 #' @export
 strip_transect <- function(line, 
                            r, 
-                           shape, 
+                           shape,
                            n_transects, 
                            width,
                            radius,

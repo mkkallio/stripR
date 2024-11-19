@@ -1,4 +1,23 @@
-straighten_line <- function(sf, tolerance, angle = 0) {
+#' Straighten a linestring to create a strip
+#' 
+#' The function creates a straight strip from the linestring provided. Douglas-
+#' Peucker simplification algorithm is used to find nodes which are used to 
+#' split the linestring in to segments. The segments are then rotated to
+#' the angle provided, and stitched together. The result is a straight line
+#' with details of the original linestring. The width of the strip (and amount
+#' of detail in the linestring) is controlled by the tolerance argument.
+#' 
+#' @param sf An sf linestring
+#' @param tolerance tolerance input for the Douglas-Peucker algorithm.
+#' @param angle The direction of of the straightened line. Default = 0 (north).
+#' 
+#' @returns a list with 1. the straightened line, and 2. the original line with
+#' segments defined by the simplification.
+#' 
+#' @export
+straighten_line <- function(sf, 
+                            tolerance, 
+                            angle = 0) {
     
     
     main_coords <- sf %>% sf::st_coordinates()
@@ -27,8 +46,8 @@ straighten_line <- function(sf, tolerance, angle = 0) {
         
         
         line <- sf::st_linestring(lcoords[,1:2]) 
-        rotated_line <- (line - start) * rotation(rotate) + start
-        rotated_line <- (rotated_line - start) * rotation(angle) + start
+        rotated_line <- (line - start) * rotation_matrix(rotate) + start
+        rotated_line <- (rotated_line - start) * rotation_matrix(angle) + start
         
         
         if(i == 2) {

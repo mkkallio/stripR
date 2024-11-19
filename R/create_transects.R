@@ -1,7 +1,19 @@
+#' Computes transects at linestring nodes
+#' 
+#' The function computes transects of a specified width from an sf linestring.
+#' The function is a translation from Jo Wood's code in 
+#' https://observablehq.com/@jwolondon/tdmc2024_day05. 
+#' 
+#' @param sf An sf linestring
+#' @param window_size how many nodes to consider when making a transect
+#' @param width The width of the transect in the same units as the CRS of linestring.
+#' 
+#' @returns an sf LINESTRING object
+#' 
 #' @export
 create_transects <- function(sf,
                              window_size = 3, 
-                             width = 500) {
+                             width) {
     transect <- list()
     pts <- sf::st_coordinates(sf)
     n_pts <- nrow(pts)

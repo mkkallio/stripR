@@ -1,10 +1,29 @@
+#' Create a strip map with vector data to a specified shape. EXPERIMENTAL
+#' 
+#' The function creates a strip of a specified shape, based on a linestring to 
+#' be bent to shape. The vectors are rotated, shifted and blended in sequence
+#' from the start of the line. The vectors and linestrings are placed so that
+#' they approximately follow the target shape. 
+#' 
+#' @param line An sf linestring
+#' @param v sf object with the vectors to be strip'd.
+#' @param tolerance Tolerance for the Douglas-Peucker simplification algorithm.
+#' See details.
+#' @param buffer_size Buffer size applied to the linestring and used to mask 
+#' the vectors.
+#' @param shape A list of angles and lengths for each segment of the shape. 
+#' Potentially obtained using create_shape(). If left NULL, the shape is a
+#' straight line pointing upward (angle = 0). See details.
+#' @param verbose Whether or not to print progress information.
+#' 
+#' @returns a list with two elements: the rotated linestring and vectors.
+#' 
 #' @export
 strip_vector <-  function(line,
                           v,
-                          shape, 
                           tolerance,
                           buffer_size,
-                          # start_point = NULL,
+                          shape, 
                           verbose = FALSE) {
     
     L1 <- NULL
@@ -17,21 +36,35 @@ strip_vector <-  function(line,
     skel <- rib$Skeleton
     rib <- rib$Ribbon
     
-    # figure out splitpoints
-    angles <- shape$angles
-    lengths <- shape$lengths
-    n_segments <- length(angles)
-    
+    # figure out split points
     coords <- sf::st_coordinates(rib)
-    miny <- min(coords[,"Y"])
-    maxy <- max(coords[,"Y"])
-    dy <- (maxy-miny) * cumsum(lengths / sum(lengths))[-n_segments]
-    split_at <- miny + dy
+    test <- is.null(shape)
+    if(test) {
+        angles <- 0
+        lengths <- 1
+        n_segments <- 1
+        
+        split_nodes <- nrow(coords)
+        inds <- 1
+    } else {
+        test <- utils::hasName(shape, c("angles", "lengths"))
+        if(any(!test)) stop("Shape not valid. Use create_shape()-function first.")
+        angles <- shape$angles
+        lengths <- shape$lengths
+        n_segments <- length(angles)
+        
+        miny <- min(coords[,"Y"])
+        maxy <- max(coords[,"Y"])
+        dy <- (maxy-miny) * cumsum(lengths / sum(lengths))[-n_segments]
+        split_at <- miny + dy
+        
+        # nodes at which splitting takes place
+        split_nodes <- sapply(split_at, \(y) {
+            which.min(abs(coords[,"Y"] - y))
+        })
+        inds <- 1:(length(split_nodes) +1)
+    }
     
-    # nodes at which splitting takes place
-    ind <- sapply(split_at, \(y) {
-        which.min(abs(coords[,"Y"] - y))
-    })
     
     
     # since the skeleton needs to be rotated at more points than the 
@@ -43,28 +76,19 @@ strip_vector <-  function(line,
     
     # PROCESS EACH SPLIT
     if(verbose) {
-        npb <- length(ind)+1
+        npb <- n_segments
         message("Processing ", npb, " segments...")
         pb <- utils::txtProgressBar(0, npb, style = 3)
     } 
     
     segment_vect <- list()
     segment_lines <- list()
-    for(i in 1:(length(ind)+1)) {
+    for(i in inds) {
         
-        # create lines between splitpoints
-        test <- i == 1
-        test2 <- i == (length(ind)+1)
-        if(test) {
-            start <- 1
-            end <- ind[i]
-        } else if(test2) {
-            start <- ind[length(ind)]
-            end <- nrow(skel_coords)
-        } else {
-            start <- ind[i-1]
-            end <- ind[i]
-        }
+        node_ind <- get_node_indices(i, split_nodes, skel_coords, n_segments)
+        start <- node_ind[1]
+        end <- node_ind[2]
+        
         lines <- skel_coords[start:end,] %>% 
             dplyr::as_tibble() %>% 
             dplyr::group_by(L1) %>% 
@@ -114,8 +138,8 @@ strip_vector <-  function(line,
             rotate_angle <- (rotate_angle + bear_rb) %% 360
             
             # rotate raster and the line
-            v_crop_moved <-  (sf::st_geometry(v_crop) - start) * rotation(rotate_angle) + start
-            ln <- (sf::st_geometry(ln) - start) * rotation(rotate_angle) + start
+            v_crop_moved <-  (sf::st_geometry(v_crop) - start) * rotation_matrix(rotate_angle) + start
+            ln <- (sf::st_geometry(ln) - start) * rotation_matrix(rotate_angle) + start
             
             # move rotated features so that they connect with the previous
             # split

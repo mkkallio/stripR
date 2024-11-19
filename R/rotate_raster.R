@@ -1,51 +1,65 @@
+#' Rotate a raster around a specified point
+#' 
+#' The function rotates a raster around a specified point.Inspired by Damien
+#' Caillaud's answer in Stackoverflow: https://gis.stackexchange.com/a/479974. 
+#' 
+#' @param r A SpatRaster to be rotated
+#' @param angle Angle in degrees, with positive angle in clock-wise direction
+#' @param point A sf POINT indicating the point around which rotation should
+#' be done. if NULL, centroid of r will be used.
+#' 
+#' @returns a rotated SpatRaster
+#' 
 #' @export
 rotate_raster <- function(r, 
-                          centroid, 
                           angle,
-                          trim = FALSE) {
+                          point = NULL) {
     
-    # inputs r, angle, centroid around which to rotate
-    # image magick
-    maxval <- unlist(terra::global(r, max, na.rm=TRUE))
-    minval <- unlist(terra::global(r, min, na.rm=TRUE))
-    img <- as.array(r) / maxval
-    img <- abind::abind(img, img, along = 3)
-    img <- abind::abind(img, img[,,1], along = 3)
-    img <- magick::image_read(img) 
-    img <- magick::image_rotate(img, angle)
-    r_rot <- raster::as.raster(img) |> as.matrix() |> terra::rast()
+    # rotation (affine transformation) using stars
+    r <- stars::st_as_stars(r)
     
-    # new extent
-    # dims <- dim(r_rot) - dim(r)
-    extent <- terra::ext(r)
-    ext_rot <- extent |> 
-        terra::as.polygons() |> 
-        sf::st_as_sf() |>
-        sf::st_set_crs(sf::st_crs(r)) |> 
-        sf::st_geometry()
-    ext_rot <- (ext_rot - centroid) * rotation(angle) + centroid
-    ext_rot <- ext_rot |> 
-        terra::vect() 
+    # get the the resolution for x and y dimensions
+    scale_x <- stars::st_dimensions(r)$x$delta
+    scale_y <- stars::st_dimensions(r)$y$delta
     
-    # set extent and resample to make sure rasters align and crop artefacts
-    r_ext <- terra::extend(r, terra::ext(ext_rot), snap = "out")
+    # get the translation from the lower left corner of the bbox
+    trans_x <- sf::st_bbox(r)[1] |> as.numeric()
+    trans_y <- sf::st_bbox(r)[2] |> as.numeric()
+    
+    # bbox of original raster
+    bbox <- sf::st_bbox(r)
+    sfc_bbox <- sf::st_as_sfc(bbox)
+    
+    test <- is.null(point)
+    if(test) point <- sf::st_centroid(sfc_bbox)
+    
+    # convert to radians:
+    rad <- angle * (pi / 180)
+    
+    # define affine parameters for rotation around centroid
+    a <- scale_x * -sin(rad)
+    b <- scale_x * cos(rad)     
+    c <- scale_y * cos(rad)   
+    d <- scale_y * sin(rad)
+    e <- trans_x 
+    f <- trans_y 
+    
+    # apply transformation
+    r_rot <- r
+    stars::st_geotransform(r_rot) = c(e, b, a, f, d, c)
+    
+    # convert to rectilinear grid
+    r_rot <- stars::st_warp(r_rot, crs = sf::st_crs(r))
+
+    # set bounding box using terra and ensure the original and rotated
+    # have same crs and resolution
+    bbox_rot <- (sfc_bbox - point) * rotation_matrix(angle) + point
+    ext_rot <- terra::ext(sf::st_as_sf(bbox_rot))
+    r_rot <- terra::rast(r_rot)
     terra::ext(r_rot) <- terra::ext(ext_rot)
-    resolution <- max(terra::res(r_rot))*2
-    r_rot <- r_rot |> 
-        terra::resample(r_ext, method = "near") 
-    
-    # trim values from 
-    if(trim) {
-        r_rot <- terra::mask(r_rot, 
-                             terra::vect(sf::st_buffer(sf::st_as_sf(ext_rot), -resolution)))
-    } else {
-        r_rot <- terra::mask(r_rot,ext_rot)
-    }
-    
-    # remove colour table 
-    terra::coltab(r_rot) <- NULL
-    # r_rot <- (r_rot + (minval-1)) * (maxval / 255)
-    r_rot <- terra::stretch(r_rot, minv = minval, maxv = maxval)
+    r <- terra::extend(terra::rast(r), ext_rot)
+    r_rot <- terra::resample(r_rot, r)
+    r_rot <- terra::trim(r_rot)
     
     return(r_rot)
 }

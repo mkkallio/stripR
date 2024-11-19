@@ -1,10 +1,29 @@
+#' Create a strip map with raster data to a specified shape
+#' 
+#' The function creates a strip of a specified shape, based on a linestring to 
+#' be bent to shape. The raster is rotated, shifted and blended in sequence
+#' from the start of the line. The rasters and linestrings are placed so that
+#' they approximately follow the target shape. 
+#' 
+#' @param line An sf linestring
+#' @param r A SpatRaster 
+#' @param tolerance Tolerance for the Douglas-Peucker simplification algorithm.
+#' See details.
+#' @param buffer_size Buffer size applied to the linestring and used to mask 
+#' the raster.
+#' @param shape A list of angles and lengths for each segment of the shape. 
+#' Potentially obtained using create_shape(). If left NULL, the shape is a
+#' straight line pointing upward (angle = 0). See details.
+#' @param verbose Whether or not to print progress information.
+#' 
+#' @returns a list with two elements: the rotated linestring and raster.
+#' 
 #' @export
 strip_raster <- function(line,
                          r,
-                         shape, 
                          tolerance,
                          buffer_size,
-                         # start_point = NULL,
+                         shape = NULL, 
                          verbose = FALSE) {
     
     L1 <- NULL
@@ -17,21 +36,34 @@ strip_raster <- function(line,
     skel <- rib$Skeleton
     rib <- rib$Ribbon
     
-    # figure out splitpoints
-    angles <- shape$angles
-    lengths <- shape$lengths
-    n_segments <- length(angles)
-    
+    # figure out split points
     coords <- sf::st_coordinates(rib)
-    miny <- min(coords[,"Y"])
-    maxy <- max(coords[,"Y"])
-    dy <- (maxy-miny) * cumsum(lengths / sum(lengths))[-n_segments]
-    split_at <- miny + dy
-    
-    # nodes at which splitting takes place
-    ind <- sapply(split_at, \(y) {
-        which.min(abs(coords[,"Y"] - y))
-    })
+    test <- is.null(shape)
+    if(test) {
+        angles <- 0
+        lengths <- 1
+        n_segments <- 1
+        
+        split_nodes <- nrow(coords)
+        inds <- 1
+    } else {
+        test <- utils::hasName(shape, c("angles", "lengths"))
+        if(any(!test)) stop("Shape not valid. Use create_shape()-function first.")
+        angles <- shape$angles
+        lengths <- shape$lengths
+        n_segments <- length(angles)
+        
+        miny <- min(coords[,"Y"])
+        maxy <- max(coords[,"Y"])
+        dy <- (maxy-miny) * cumsum(lengths / sum(lengths))[-n_segments]
+        split_at <- miny + dy
+        
+        # nodes at which splitting takes place
+        split_nodes <- sapply(split_at, \(y) {
+            which.min(abs(coords[,"Y"] - y))
+        })
+        inds <- 1:(length(split_nodes) +1)
+    }
     
     
     
@@ -44,28 +76,19 @@ strip_raster <- function(line,
     
     # PROCESS EACH SPLIT
     if(verbose) {
-        npb <- length(ind)+1
+        npb <- n_segments
         message("Processing ", npb, " segments...")
         pb <- utils::txtProgressBar(0, npb, style = 3)
     } 
     
     segment_dems <- list()
     segment_lines <- list()
-    for(i in 1:(length(ind)+1)) {
+    for(i in inds) {
         
-        # create lines between splitpoints
-        test <- i == 1
-        test2 <- i == (length(ind)+1)
-        if(test) {
-            start <- 1
-            end <- ind[i]
-        } else if(test2) {
-            start <- ind[length(ind)]
-            end <- nrow(skel_coords)
-        } else {
-            start <- ind[i-1]
-            end <- ind[i]
-        }
+        node_ind <- get_node_indices(i, split_nodes, skel_coords, n_segments)
+        start <- node_ind[1]
+        end <- node_ind[2]
+       
         lines <- skel_coords[start:end,] %>% 
             dplyr::as_tibble() %>% 
             dplyr::group_by(L1) %>% 
@@ -79,7 +102,7 @@ strip_raster <- function(line,
         
         target_angle <- (angles[i] + 360) %% 360
         
-        # split angle
+        # rib_lines also for adjusting split angle
         rib_line <- rib_coords[start:end,] %>% 
             dplyr::as_tibble() %>% 
             dplyr::group_by(L1) %>% 
@@ -91,7 +114,7 @@ strip_raster <- function(line,
             sf::st_cast("LINESTRING") 
         
         # ----------------------
-        # crop rasters for each line segment betweem splitpoints, and rotate
+        # crop rasters for each line segment between split points, and rotate
         rr <- list()
         rln <- list()
         for(ii in seq_along(lines)) {
@@ -115,9 +138,10 @@ strip_raster <- function(line,
             
             # rotate raster and the line
             r_crop <- r_crop %>% 
-                rotate_raster(start, rotate_angle, trim = TRUE) 
-            ln <- (sf::st_geometry(ln) - start) * rotation(rotate_angle) + start
-            r_crop <- terra::mask(r_crop, terra::vect(sf::st_buffer(ln, buffer_size)))
+                rotate_raster(rotate_angle, start) 
+            ln <- (sf::st_geometry(ln) - start) * rotation_matrix(rotate_angle) + start
+            r_crop <- terra::mask(r_crop, 
+                                  terra::vect(sf::st_buffer(ln, buffer_size)))
             
             
             # move rotated features so that they connect with the previous
@@ -163,30 +187,70 @@ strip_raster <- function(line,
         
         if(verbose) utils::setTxtProgressBar(pb, i)
     }
+
     if(verbose) {
         close(pb)
-        npb <- length(segment_dems)
-        message("Blending ", npb, " segments...")
-        pb <- utils::txtProgressBar(0, npb, style = 3)
     } 
-
+    
     # combine all previous blended rasters
     # TODO: this does not need to be a separate phase, but can be 
     # integrated in the above loop
-    blend <- segment_dems[[1]]
-    for(ii in 2:length(segment_dems)) {
-        blend <- blend_rasters(r1 = blend, 
-                               r2 = segment_dems[[ii]],
-                               l1 = segment_lines[[ii-1]], 
-                               l2 = segment_lines[[ii]],
-                               blenddist = buffer_size)
-        if(verbose) utils::setTxtProgressBar(pb, ii)
-        message(ii)
-    } 
-    if(verbose) close(pb)
+    # TODO: blending does not currently work for shapes which join one another
+    # in the end. This requires work on how the lines and their extensions are
+    # handled.
+    test <- n_segments > 1
+    if(test) {
+        if(verbose) {
+            npb <- length(segment_dems)
+            message("Blending ", npb, " segments...")
+            pb <- utils::txtProgressBar(0, npb, style = 3)
+        } 
+        blend <- segment_dems[[1]]
+        for(ii in 2:length(segment_dems)) {
+            blend <- blend_rasters(r1 = blend, 
+                                   r2 = segment_dems[[ii]],
+                                   l1 = segment_lines[[ii-1]], 
+                                   l2 = segment_lines[[ii]],
+                                   blenddist = buffer_size)
+            if(verbose) utils::setTxtProgressBar(pb, ii)
+        } 
+        if(verbose) close(pb)
+    } else {
+        blend <- segment_dems[[1]]
+    }
+   
     
     segments <- do.call(c, segment_lines)
     
     return(list(rotated_line = segments,
                 rotated_r = blend))
 }
+
+
+
+ get_node_indices <- function(i, split_nodes, skel_coords, n_segments) {
+     
+     test <- n_segments == 1
+     if(test) {
+         start <- 1
+         end <- nrow(skel_coords)
+     } else {
+         # create lines between splitpoints
+         test <- i == 1
+         test2 <- i == (length(split_nodes)+1)
+         if(test) {
+             start <- 1
+             end <- split_nodes[i]
+         } else if(test2) {
+             start <- split_nodes[length(split_nodes)]
+             end <- nrow(skel_coords)
+         } else {
+             start <- split_nodes[i-1]
+             end <- split_nodes[i]
+         }
+     }
+     
+    return(c(start = start, end = end))
+     
+ }
+ 

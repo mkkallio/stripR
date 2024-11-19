@@ -1,10 +1,23 @@
+#' Creates the list of lengths and angles for use in strip_*()-functions
+#' 
+#' The function takes an input of a linestring, which is simplified based on
+#' given tolerance. The lengths and angles between nodes are then recorded.
+#' 
+#' 
+#' @param line a sf linestring object showing the target line.
+#' @param tolerance The number of transects to create from the line
+#
+#' 
+#' @returns a list with three elements: 1. the simplified shape, and its 
+#' associated 2. lengths, and 3. angles. 
+#' 
 #' @export
-create_shape <- function(shape, 
+create_shape <- function(line, 
                          tolerance) {
     
     . <- NULL
     
-    l <- sf::st_simplify(shape, 
+    l <- sf::st_simplify(line, 
                          preserveTopology = TRUE,
                          dTolerance = tolerance) %>% 
         sf::st_geometry() %>% 
