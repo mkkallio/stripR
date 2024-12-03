@@ -23,7 +23,9 @@ strip_vector <-  function(line,
                           v,
                           tolerance,
                           buffer_size,
-                          shape, 
+                          shape = NULL, 
+                          remove_overlap = TRUE,
+                          split_features = FALSE,
                           verbose = FALSE) {
     
     L1 <- NULL
@@ -81,8 +83,10 @@ strip_vector <-  function(line,
         pb <- utils::txtProgressBar(0, npb, style = 3)
     } 
     
-    segment_vect <- list()
-    segment_lines <- list()
+    # segment_vect <- list()
+    # segment_lines <- list()
+    rv <- list()
+    rln <- list()
     for(i in inds) {
         
         node_ind <- get_node_indices(i, split_nodes, skel_coords, n_segments)
@@ -116,8 +120,6 @@ strip_vector <-  function(line,
         
         # ----------------------
         # crop rasters for each line segment betweem splitpoints, and rotate
-        rv <- list()
-        rln <- list()
         for(ii in seq_along(lines)) {
             ln <- lines[ii] 
             v_crop <- sf::st_intersection(v, lines_buf[ii]) 
@@ -160,21 +162,98 @@ strip_vector <-  function(line,
                 dplyr::mutate(major_rotate = i,
                        minor_rotate = ii,
                        rotation_angle = rotate_angle)
-            rv[[ii]] <- v_crop
-            rln[[ii]] <- ln
+            ln <- sf::st_sf(ln,
+                            major_rotate = i,
+                            minor_rotate = ii,
+                            rotation_angle = rotate_angle)
+            
+            rv <- append(rv, list(v_crop))
+            rln <- append(rln, list(ln))
         }
         
-        segment_lines[[i]] <- do.call(c, rln)
-        segment_vect[[i]] <- do.call(rbind, rv)
+        # segment_lines[[i]] <- do.call(rbind, rln)
+        # segment_vect[[i]] <- do.call(rbind, rv)
         
         if(verbose) utils::setTxtProgressBar(pb, i)
     }
     if(verbose) close(pb)
     
+    if(remove_overlap) {
+        rv <- remove_overlap(rln, rv, buffer_size, split_features)
+    }
     
-    segments <- do.call(c, segment_lines)
-    vectors <- do.call(rbind, segment_vect)
+    
+    segments <- do.call(rbind, rln)
+    vectors <- do.call(rbind, rv)
     
     return(list(rotated_line = segments,
                 rotated_v = vectors))
+}
+
+
+remove_overlap <- function(rln, rv, buffer_size, split_features) {
+    
+    crs <- st_crs(rv[[1]])
+    
+    # REMOVE OVERLAPS FROM VECTORS
+    for(i in 2:length(rv)) {
+        
+        # create transect and buffer zones
+        l1 <- rln[[i-1]]
+        l2 <- rln[[i]]
+        
+        l1c <- sf::st_coordinates(l1)
+        l2c <- sf::st_coordinates(l2)
+        
+        nl1c <- nrow(l1c)
+        transect <- rbind(l1c[(nl1c-1):nl1c,1:2],
+                          l2c[2,1:2]) %>%
+            sf::st_linestring() %>% 
+            sf::st_sfc() %>% 
+            create_transects(width = buffer_size*2)
+        transect <- transect[2]
+        
+        t_left <- sf::st_buffer(transect, buffer_size, singleSide = TRUE) 
+        t_right <- sf::st_buffer(transect, -buffer_size, singleSide = TRUE) 
+        
+        v1 <- rv[[i-1]] %>% sf::st_set_crs(NA)
+        v2 <- rv[[i]] %>% sf::st_set_crs(NA)
+        
+        # handle different geometry types
+        if(split_features) {
+            v1 <- st_intersection(t_left, v1) %>% 
+                st_union() %>% 
+                st_buffer(0.1) %>% 
+                st_difference(v1, .) %>% 
+                sf::st_set_crs(crs)
+            
+            v2 <- st_intersection(t_right, v2) %>% 
+                st_union() %>% 
+                st_buffer(0.1) %>% 
+                st_difference(v2, .) %>% 
+                sf::st_set_crs(crs)
+
+        } else {
+           predicate <- sf::st_intersects
+           
+           ind <- v1 %>% 
+               predicate(t_left, ., sparse = FALSE) %>% 
+               as.vector()    
+           v1 <- dplyr::filter(v1, !ind) %>% 
+               sf::st_set_crs(crs)
+           
+           ind <- v2 %>% 
+               predicate(t_right, ., sparse = FALSE) %>% 
+               as.vector()    
+           v2 <- dplyr::filter(v2, !ind) %>% 
+               sf::st_set_crs(crs)
+        }
+       
+      
+       
+        rv[[i-1]] <- v1
+        rv[[i]] <- v2
+    }
+    
+    return(rv)
 }

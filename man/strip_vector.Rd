@@ -4,7 +4,16 @@
 \alias{strip_vector}
 \title{Create a strip map with vector data to a specified shape. EXPERIMENTAL}
 \usage{
-strip_vector(line, v, tolerance, buffer_size, shape, verbose = FALSE)
+strip_vector(
+  line,
+  v,
+  tolerance,
+  buffer_size,
+  shape = NULL,
+  remove_overlap = TRUE,
+  split_features = FALSE,
+  verbose = FALSE
+)
 }
 \arguments{
 \item{line}{An sf linestring}

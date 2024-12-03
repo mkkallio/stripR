@@ -7,7 +7,7 @@
 #' 
 #' @export
 rotation_matrix <- function(a) {
-    r = a * pi / 180 #degrees to radians
+    r <- deg2rad(a)
     matrix(c(cos(r), sin(r), -sin(r), cos(r)), nrow = 2, ncol = 2)
 } 
 
@@ -38,8 +38,21 @@ bearing_2d <- function(mat) {
 #' 
 #' @export
 rad2deg <- function(rad) {
-    (rad * 180) / (pi)
+    rad * 180 / pi
 }
+
+#' Convert degrees to radians
+#' 
+#' @param deg A vector of degrees to convert 
+#' 
+#' @returns Vector of degrees
+#' 
+#' @export
+deg2rad <- function(deg) {
+    deg * pi / 180 
+}
+
+
 
 #' Compute displacement in X and Y coordinates
 #' 

@@ -52,11 +52,10 @@ create_transects <- function(sf,
                           y = y0 + width * perpY),
                         c(x = x0 - width * perpX,
                           y = y0 - width * perpY))
-        transect[[i]] <- sf::st_linestring(coords)
+        transect[[i]] <- sf::st_sfc(sf::st_linestring(coords))
         
     }
     transect <- do.call(c, transect) %>% 
-        sf::st_sfc() %>% 
         sf::st_set_crs(sf::st_crs(sf))
     # st_set_crs(transect) <- crs(points)
     

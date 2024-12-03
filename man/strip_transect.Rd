@@ -30,5 +30,5 @@ The function creates a strip of the specified shape with raster data
 using transects derived from the linestring. Raster data is then sampled
 from the raster with the linestring. The values are then translated to
 transects computed from the target shape, and gaps are filled with 
-using IDW interpolation. EXPERIMENTAL AND SUBJECT TO CHANGE
+using IDW interpolation. EXPERIMENTAL AND SUBJECT TO CHANGE!
 }

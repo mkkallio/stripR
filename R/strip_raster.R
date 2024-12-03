@@ -140,12 +140,12 @@ strip_raster <- function(line,
             r_crop <- r_crop %>% 
                 rotate_raster(rotate_angle, start) 
             ln <- (sf::st_geometry(ln) - start) * rotation_matrix(rotate_angle) + start
-            r_crop <- terra::mask(r_crop, 
-                                  terra::vect(sf::st_buffer(ln, buffer_size)))
+            # r_crop <- terra::mask(r_crop, 
+            #                       terra::vect(sf::st_buffer(ln, buffer_size)))
             
             
             # move rotated features so that they connect with the previous
-            # split
+            # split. blend rasters together and stich lines.
             test <- ii > 1 || i > 1
             if(test) {
                 move <- last_end - start
@@ -153,37 +153,67 @@ strip_raster <- function(line,
                 
                 move <- sf::st_coordinates(move)
                 r_crop <- terra::shift(r_crop, dx = move[1], dy = move[2])
+                
+                crs(r_crop) <- project(r_crop, r)
+                ln <- sf::st_set_crs(ln, sf::st_crs(lines))
+                
+                blend <- blend_rasters(blend, r_crop,
+                                       lncol, ln,
+                                       blenddist = buffer_size)
+                
+                ln <- ln %>% sf::st_sf(major_rotate = i,
+                                       minor_rotate = ii,
+                                       rotation_angle = rotate_angle) 
+                lncol <- rbind(lncol, ln)
+            } else {
+                crs(r_crop) <- project(r_crop, r)
+                blend <- r_crop
+                lncol <- ln %>% 
+                    sf::st_set_crs(sf::st_crs(lines)) %>% 
+                    sf::st_sf(major_rotate = i,
+                              minor_rotate = ii,
+                              rotation_angle = rotate_angle)
             }
             
             # record to the list
-            ln <- sf::st_set_crs(ln, sf::st_crs(lines))
+            # ln <- sf::st_set_crs(ln, sf::st_crs(lines))
+            # crs(r_crop) <- project(r_crop, r)
             last_end <- lwgeom::st_endpoint(ln)
-            rr[[ii]] <- r_crop
-            rln[[ii]] <- ln
+            
+            # ln <- sf::st_sf(ln,
+            #                 major_rotate = i,
+            #                 minor_rotate = ii,
+            #                 rotation_angle = rotate_angle)
+            
+            # rr[[ii]] <- r_crop
+            # rln[[ii]] <- ln
         }
         
         
         
-        # BLEND ROTATED AND SHIFTED RASTERS
-        n <- length(rr)
-        test <- n > 1
-        if(test) {
-            for(ii in 2:length(rr)) {
-                blended <- blend_rasters(rr[[ii-1]], rr[[ii]],
-                                         rln[[ii-1]], rln[[ii]],
-                                         blenddist = buffer_size)
-                
-                if(ii == n) {
-                    segment_dems[[i]] <- blended
-                } else {
-                    rr[[ii]] <- blended
-                }
-            } 
-        } else {
-            segment_dems[[i]] <- rr[[1]]
-        }
+        # # BLEND ROTATED AND SHIFTED RASTERS
+        # n <- length(rr)
+        # test <- n > 1
+        # if(test) {
+        #     for(ii in 2:length(rr)) {
+        #         blended <- blend_rasters(rr[[ii-1]], rr[[ii]],
+        #                                  rln[[ii-1]], rln[[ii]],
+        #                                  blenddist = buffer_size)
+        #         
+        #         if(ii == n) {
+        #             segment_dems[[i]] <- blended
+        #         } else {
+        #             rr[[ii]] <- blended
+        #         }
+        #     } 
+        # } else {
+        #     segment_dems[[i]] <- rr[[1]]
+        # }
         
-        segment_lines[[i]] <- do.call(c, rln)
+        # segment_lines[[i]] <- do.call(rbind, rln)
+        
+        segment_dems[[i]] <- blend
+        segment_lines[[i]] <- lncol
         
         if(verbose) utils::setTxtProgressBar(pb, i)
     }
@@ -198,6 +228,8 @@ strip_raster <- function(line,
     # TODO: blending does not currently work for shapes which join one another
     # in the end. This requires work on how the lines and their extensions are
     # handled.
+    blend <- segment_dems[[1]]
+    
     test <- n_segments > 1
     if(test) {
         if(verbose) {
@@ -205,7 +237,6 @@ strip_raster <- function(line,
             message("Blending ", npb, " segments...")
             pb <- utils::txtProgressBar(0, npb, style = 3)
         } 
-        blend <- segment_dems[[1]]
         for(ii in 2:length(segment_dems)) {
             blend <- blend_rasters(r1 = blend, 
                                    r2 = segment_dems[[ii]],
@@ -215,12 +246,10 @@ strip_raster <- function(line,
             if(verbose) utils::setTxtProgressBar(pb, ii)
         } 
         if(verbose) close(pb)
-    } else {
-        blend <- segment_dems[[1]]
-    }
+    } 
    
     
-    segments <- do.call(c, segment_lines)
+    segments <- do.call(rbind, segment_lines)
     
     return(list(rotated_line = segments,
                 rotated_r = blend))

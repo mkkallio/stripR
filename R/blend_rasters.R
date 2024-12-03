@@ -17,6 +17,8 @@ blend_rasters <- function(r1, r2,
                           l1, l2, 
                           blenddist) {
     
+    # r2 <- project(r2, r1)
+    
     #prepare dem
     fulldem <- terra::rast(stars::st_mosaic(stars::st_as_stars(r1),
                                      stars::st_as_stars(r2)))
@@ -28,8 +30,8 @@ blend_rasters <- function(r1, r2,
     # ensure both lines extend to the blend buffer border
     # This is necessary when the l1 or l2 do not extent to the border
     # of the blend buffer to avoid artefacts.
-    l1 <- extend_line(l1, resolution, blenddist)
-    l2 <- extend_line(l2, resolution, blenddist)
+    l1 <- extend_line(l1, resolution, blenddist, extend = "start")
+    l2 <- extend_line(l2, resolution, blenddist, extend = "end")
     
     
     # get buffers from blending distance
@@ -58,16 +60,30 @@ blend_rasters <- function(r1, r2,
 } 
 
 
-extend_line <- function(l, resolution, blenddist) {
+extend_line <- function(l, resolution, blenddist, extend) {
     crs <- sf::st_crs(l)
-    l <- sf::st_coordinates(l)[,1:2]
-    bear <- bearing_2d(l[c(nrow(l), 1),])
-    move <- move_coords(bear, seq(from = min(resolution), 
-                                  blenddist, 
-                                  by = min(resolution)*2))
-    move[,1] <- move[,1] + l[1,1]
-    move[,2] <- move[,2] + l[1,2]
-    l <- rbind(move, l)
+    
+    if(extend == "start") {
+        l <- sf::st_coordinates(l)[,1:2]
+        bear <- bearing_2d(l[c(nrow(l), 1),])
+        move <- move_coords(bear, seq(from = min(resolution), 
+                                      blenddist, 
+                                      by = min(resolution)*2))
+        move[,1] <- move[,1] + l[1,1]
+        move[,2] <- move[,2] + l[1,2]
+        l <- rbind(move, l)
+    } else if(extend == "end") {
+        l <- sf::st_coordinates(l)[,1:2]
+        bear <- bearing_2d(l[c(1, nrow(l)),])
+        move <- move_coords(bear, seq(from = min(resolution), 
+                                      blenddist, 
+                                      by = min(resolution)*2))
+        move[,1] <- move[,1] + l[nrow(l),1]
+        move[,2] <- move[,2] + l[nrow(l),2]
+        l <- rbind(l, move)
+    }
+    
+    
     l <- sf::st_linestring(l) %>% 
         sf::st_sfc() %>% 
         sf::st_sf() %>% 
