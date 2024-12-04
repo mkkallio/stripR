@@ -1,7 +1,5 @@
-# readme
-
-
 # stripR: a tool to support strip mapping
+
 
 Strip maps are a type of maps which typically show a linear feature
 (think of a river, a road, or an itinerary) and their immediate
@@ -117,7 +115,7 @@ strip <- strip_raster(example_line,
 toc()
 ```
 
-    8.4 sec elapsed
+    9.27 sec elapsed
 
 ``` r
 plot(strip$rotated_r)
@@ -210,7 +208,7 @@ round_strip <- strip_raster(example_line,
 toc()
 ```
 
-    75.75 sec elapsed
+    86.78 sec elapsed
 
 ``` r
 round_buffers <- st_buffer(round_strip$rotated_line, 5000)
@@ -238,7 +236,7 @@ rect_strip <- strip_raster(example_line,
 toc()
 ```
 
-    38.39 sec elapsed
+    49.34 sec elapsed
 
 ``` r
 rect_buffers <- st_buffer(rect_strip$rotated_line, 5000)
@@ -285,7 +283,7 @@ strip <- strip_vector(example_road,
 toc()
 ```
 
-    0.27 sec elapsed
+    0.39 sec elapsed
 
 ``` r
 plot(st_geometry(strip$rotated_v))
