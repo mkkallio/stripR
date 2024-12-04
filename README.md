@@ -14,7 +14,8 @@ features based on a skeleton line feature to straighten.
 
 ## Installing the package
 
-The package currently lives only in github
+The package currently lives only in github, and can be installed with
+devtools.
 
 ``` r
 devtools::install_github("mkkallio/stripR")
@@ -29,37 +30,22 @@ each node the algorithm picks. To illustrate, let’s look at this
 recording of a 200 km bike ride in Southern Finland and a DEM from the
 National Land Survey of Finland in the background.
 
-    terra 1.7.46
+``` r
+library(terra)
+library(sf)
+library(stripR)
+library(dplyr)
+library(tictoc)
 
-    Warning: package 'sf' was built under R version 4.3.3
+data("example_line")
+path <- system.file("extdata", 
+                    "example_raster.tif", 
+                    package="stripR")
+dem <- rast(path)
 
-    Linking to GEOS 3.11.2, GDAL 3.8.2, PROJ 9.3.1; sf_use_s2() is TRUE
-
-    Warning: package 'dplyr' was built under R version 4.3.3
-
-
-    Attaching package: 'dplyr'
-
-    The following objects are masked from 'package:terra':
-
-        intersect, union
-
-    The following objects are masked from 'package:stats':
-
-        filter, lag
-
-    The following objects are masked from 'package:base':
-
-        intersect, setdiff, setequal, union
-
-    Warning: package 'tictoc' was built under R version 4.3.2
-
-
-    Attaching package: 'tictoc'
-
-    The following objects are masked from 'package:terra':
-
-        shift, size
+plot(dem)
+plot(example_line, add=TRUE, col = "black")
+```
 
 ![](readme_files/figure-commonmark/unnamed-chunk-2-1.png)
 
@@ -115,7 +101,7 @@ strip <- strip_raster(example_line,
 toc()
 ```
 
-    9.27 sec elapsed
+    8.78 sec elapsed
 
 ``` r
 plot(strip$rotated_r)
@@ -208,7 +194,7 @@ round_strip <- strip_raster(example_line,
 toc()
 ```
 
-    86.78 sec elapsed
+    73.13 sec elapsed
 
 ``` r
 round_buffers <- st_buffer(round_strip$rotated_line, 5000)
@@ -236,7 +222,7 @@ rect_strip <- strip_raster(example_line,
 toc()
 ```
 
-    49.34 sec elapsed
+    36.74 sec elapsed
 
 ``` r
 rect_buffers <- st_buffer(rect_strip$rotated_line, 5000)
@@ -283,7 +269,7 @@ strip <- strip_vector(example_road,
 toc()
 ```
 
-    0.39 sec elapsed
+    0.22 sec elapsed
 
 ``` r
 plot(st_geometry(strip$rotated_v))
